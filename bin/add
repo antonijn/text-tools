@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+from operator import mul, add
+import sys
+
+if sys.argv[0].endswith('mul'):
+	action = mul
+	seed = 1
+else:
+	action = add
+	seed = 0
+
+def get_num(s):
+	try:
+		val = int(s)
+	except:
+		try:
+			val = float(s)
+		except:
+			sys.stderr.write('??? ' + s + '\n')
+			sys.exit(1)
+
+	return val
+
+for l in sys.stdin:
+	seed = action(seed, get_num(l))
+
+print(seed)

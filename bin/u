@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+# Copyright (c) 2017, Antonie Blom
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+import json
+import os
+import sys
+import unicodedata
+from operator import itemgetter
+
+args = sys.argv[1:]
+
+def usage(c):
+	out = sys.stdout if c == 0 else sys.stderr
+	out.write('Usage: u [\'<unicode character name>\'...]\n')
+	sys.exit(c)
+
+def search_configs(start):
+	rcpath = os.path.join(start, '.urc')
+	if os.path.isfile(rcpath):
+		yield rcpath
+
+	nxt = os.path.dirname(start)
+	if nxt != start:
+		for cfg in search_configs(nxt):
+			yield cfg
+
+config_paths = list(search_configs(os.getcwd()))
+
+shortcuts = {}
+for path in config_paths:
+	with open(path) as f:
+		try:
+			shortcuts.update(json.load(f))
+		except:
+			sys.stderr.write('warning: unable to load ' + path + '\n')
+
+def list_shortcuts(
+        normal=True,
+        combining=True,
+        codepoints=False,
+        glyphs=True,
+        name=True):
+
+	print('FROM CONFIGS:')
+	for cfg in config_paths:
+		print(cfg)
+
+	print()
+	print('CHARACTERS:')
+
+	kvps = sorted(shortcuts.items(), key=itemgetter(1))
+
+	for chname, char in kvps:
+		is_combining = unicodedata.combining(char) != 0
+		if is_combining:
+			if not combining:
+				continue
+		else:
+			if not normal:
+				continue
+
+		if glyphs:
+			if is_combining:
+				sys.stdout.write('\u25CC')
+			sys.stdout.write(char + ' ')
+
+		if codepoints:
+			sys.stdout.write(hex(ord(char)) + ' ')
+
+		if name:
+			sys.stdout.write(chname)
+
+		print()
+
+	sys.exit()
+
+if '--list' in args:
+	list_shortcuts()
+
+for arg in args:
+	if not arg.startswith('--list='):
+		continue
+
+	popts = {
+		'gl': True,
+		'cp': False,
+		'comb': True,
+		'norm': True,
+		'name': True
+	}
+
+	arg = arg[len('--list='):]
+	opts = arg.split(',')
+	for opt in opts:
+		if len(opt) == 0:
+			usage(1)
+
+		if opt[0] != '+' and opt[0] != '-':
+			usage(1)
+
+		if opt[1:] not in popts:
+			usage(1)
+
+		popts[opt[1:]] = (opt[0] == '+')
+
+	list_shortcuts(glyphs=popts['gl'],
+	               codepoints=popts['cp'],
+	               combining=popts['comb'],
+	               normal=popts['norm'],
+	               name=popts['name'])
+
+def lookup(name):
+	if name in shortcuts:
+		return shortcuts[name]
+
+	if len(name) == 1 and ord(name[0]) < 0x80:
+		return name
+
+	return unicodedata.lookup(name.upper())
+
+
+to_print = []
+
+for arg in args:
+	try:
+		to_print.append(lookup(arg))
+	except:
+		usage(1)
+
+sys.stdout.write(unicodedata.normalize('NFC', ''.join(to_print)))
+
+if os.isatty(1):
+	print()

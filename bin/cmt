@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+# Copyright (c) 2017, Antonie Blom
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+import argparse
+import os
+import sys
+
+python = (None,'#',None)
+c = ('/*',None,'*/')
+d = ('/+',None,'+/')
+cpp = (None,'//',None)
+lua = (None,'//',None)
+
+styles = {
+	'bash': python,
+	'c': c,
+	'cpp': cpp,
+	'cs': cpp,
+	'd': d,
+	'go': cpp,
+	'haskell': lua,
+	'java': cpp,
+	'ksh': python,
+	'lua': lua,
+	'python': python,
+	'sh': python,
+	'zsh': python,
+}
+
+docstyles = {
+	'c': ('/*', ' *', ' */'),
+	'd': ('/+', ' +', ' +/'),
+}
+
+langs = sorted(styles.keys())
+
+prs = argparse.ArgumentParser(description='Comment out text.')
+prs.add_argument('-d', dest='doc', action='store_true', help='documentation mode')
+prs.add_argument('-l',
+	type=str,
+	metavar='LANG',
+	dest='lang',
+	default=os.getenv('SRC_LANG'),
+	choices=langs,
+	help='programming language (default value is environment variable SRC_LANG)'
+)
+prs.set_defaults(doc=False)
+args = prs.parse_args()
+
+if args.lang not in styles:
+	if args.lang is None:
+		sys.stderr.write('cmt: Language not set\n')
+	else:
+		sys.stderr.write('cmt: Language ' + args.lang + ' not supported\n')
+		sys.stderr.write('Supported are: ' + ', '.join(langs) + '\n')
+	sys.exit(1)
+
+if args.lang is None:
+	sys.stderr.write('cmt: language not set\n')
+	sys.exit(1)
+if args.doc and args.lang in docstyles:
+	style = docstyles[args.lang]
+else:
+	style = styles[args.lang]
+
+pfx, linepfx, sfx = style
+
+def strip_indent(line, ident_unit, maximum=-1):
+	if maximum == 0 or not line.startswith(ident_unit):
+		return line
+
+	return strip_indent(line[len(ident_unit):], ident_unit, maximum=max(maximum - 1, -1))
+
+def indent_level(line, ident_unit):
+	return (len(line) - len(strip_indent(line, ident_unit))) // len(ident_unit)
+
+lines = sys.stdin.readlines()
+ident_unit = os.getenv('SRC_INDENT', default='\t')
+ind = min((indent_level(l, ident_unit) for l in lines if l != '\n'), default=0)
+ident = ident_unit * ind
+
+if pfx is not None:
+	sys.stdout.write(ident + pfx + '\n')
+
+for l in lines:
+	if not args.doc and l == '\n':
+		sys.stdout.write(l)
+		continue
+
+	sys.stdout.write(ident)
+	if linepfx is not None:
+		sys.stdout.write(linepfx)
+
+	if args.doc and l != '\n':
+		sys.stdout.write(' ')
+
+	sys.stdout.write(strip_indent(l, ident_unit, maximum=ind))
+
+if sfx is not None:
+	sys.stdout.write(ident + sfx + '\n')
