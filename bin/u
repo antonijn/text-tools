@@ -26,7 +26,7 @@ def usage(c):
 	sys.exit(c)
 
 def search_configs(start):
-	rcpath = os.path.join(start, '.urc')
+	rcpath = os.path.join(start, '.config/urc')
 	if os.path.isfile(rcpath):
 		yield rcpath
 

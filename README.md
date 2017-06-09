@@ -45,8 +45,8 @@ Behold how `main.c` now contains just what you requested.
 ### u
 Let's say you're learning Icelandic, but can't be bothered to change your
 keyboard layout to Icelandic, or even US-Intl. `u` is the program for you!
-Simply put the following file in your home directory (or any parent
-directory of your working directory) and call it `.urc`.
+Simply make a `.config` directory in any parent directory of your current
+working directory, and place a file called `urc` in it, containing:
 
 ```json
 {
