@@ -129,9 +129,56 @@ def lookup(name):
 
 	return unicodedata.lookup(name.upper())
 
+def get_bracket_content(string):
+	brackLevel = 0
+	res = ''
+
+	for idx, ch in enumerate(string):
+		if ch == '{':
+			brackLevel += 1
+		elif ch == '}':
+			brackLevel -= 1
+			if brackLevel == 0:
+				return res[1:], string[idx+1:]
+
+		res += ch
+
+	return None, string
+
+def convert_line(line):
+	idx = line.find('\\')
+	if idx == -1:
+		return line
+
+	init = line[:idx]
+	tail = line[idx+1:]
+
+	tok = None
+	if tail.startswith('{'):
+		tok, tail = get_bracket_content(tail)
+	elif len(tail) > 0:
+		tok = tail[0]
+		tail = tail[1:]
+
+	if tok == None:
+		return init + '\\' + tail
+
+	prefix = ''
+	try:
+		lk = lookup(tok)
+		if lk == tok:
+			lk = '\\' + lk
+		return init + lk + convert_line(tail)
+	except:
+		return init + '\{' + tok + '}' + convert_line(tail)
+
+if len(args) == 0:
+	for line in sys.stdin:
+		sys.stdout.write(convert_line(line))
+
+	sys.exit()
 
 to_print = []
-
 for arg in args:
 	try:
 		to_print.append(lookup(arg))
