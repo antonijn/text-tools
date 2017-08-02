@@ -1,35 +1,92 @@
-#!/usr/bin/env python3
-import sys
+#!/usr/bin/perl6
+use strict;
 
-pep8 = '--pep8' in sys.argv[1:]
+grammar CToken {
+	token TOP {
+		[
+		<preproc> |
+		<comment> |
+		<line-comment> |
+		<number> |
+		<operator> |
+		<word> |
+		<string-literal> |
+		<char-literal> |
+		\s+
+		]*
+	}
 
-ws = ' \t\v\r'
-for line in sys.stdin:
-	if line == '\n':
-		print()
-		continue
+	token preproc { ^^ [ <comment> | \h ]* <directive> [ <-[\\\n]>+ | \\<-[\n]> | \\\n ]* $$ }
+	token directive { '#' [ <comment> | \h ]* <word> }
+	token comment { '/*' .*? '*/' }
+	token line-comment { '//' [ <-[\\\n]>+ | \\<-[\n]> | \\\n ]* $$ }
+	token number { '.'? \d+ [ <[eEpP]><[+-]> | <[.\w]> ]* }
+	token operator {
+		[
+		'++' | '--' | '&&' | '||' | '->' |
+		'+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=' | '~=' | '<<=' | '>>=' |
+		'==' | '!=' | '>=' | '<=' |
+		'<<' | '>>' |
+		'+' | '-' | '*' | '/' | '%' | '^' | '&' | '|' | '!' | '<' | '>' |
+		'.' | ';' | ':' | '(' | ')' | '{' | '}' | '[' | ']' | ',' | '~' | '='
+		]
+	}
+	token word { <[a..zA..Z_]>+ \w* }
+	token string-literal { \" [ <-[\\"]>+ | \\<-["]> | \\\"]* \" }
+	token char-literal { \' [ <-[\\']>+ | \\<-[']> | \\\']* \' }
+}
 
-	try:
-		lindent = len(line.lstrip(ws))
-		indent = line[:-lindent]
-		rest = line[-lindent:]
+class ArgFormatter {
+	# makes a list of argument strings
+	method TOP($/) {
+		# keeps track of parenthesis level
+		my $levels = 0;
+		# the index after last comma
+		my $origIdx = 0;
+		# list of argument strings
+		my @result = ();
 
-		[left, args_suffix] = rest.split('(', 1)
-		ispydef = pep8 and left.startswith('def ')
-		[argslist, suffix] = args_suffix.split(')')
-		args = [a.strip(ws) for a in argslist.split(',')]
+		for $/<operator> -> $tok {
+			if $levels == 0 and $tok eq ',' {
+				my $len = $tok.from - $origIdx;
+				my $argStr = $tok.orig.substr($origIdx, $len);
+				@result.push($argStr);
+				$origIdx = $tok.to;
+			} elsif $tok eq '(' {
+				$levels++;
+			} elsif $tok eq ')' {
+				$levels--;
+			}
+		}
 
-		sys.stdout.write(indent + left + '(')
+		@result.push($/.orig.substr($origIdx));
+		make @result;
+	}
+}
 
-		if ispydef:
-			indent = indent + ' ' * 8
-			sys.stdout.write('\n' + indent + args[0])
-		else:
-			indent = indent + ' ' * (len(left) + 1)
-			sys.stdout.write(args[0])
-		for a in args[1:]:
-			sys.stdout.write(',\n' + indent + a)
-		sys.stdout.write(')' + suffix)
-	except:
-		sys.stderr.write('Malformed line\n')
-		sys.exit(1)
+my $fmtr = ArgFormatter.new();
+
+for lines() -> $line {
+	if not $line ~~ /(\t*) (.*?) '(' (.*) ')' (.*)/ {
+		put $line;
+		next;
+	}
+	my ($indent, $name, $args, $post) = ($0, $1, $2, $3);
+
+	print $indent, $name;
+
+	# the whitespace that comes before the arguments to align them
+	my $preArgWS = $indent ~ $name.subst(/./, ' ', :g);
+
+	# an attempt to split the arguments into tokens
+	my $argMatch = CToken.parse($args, actions => $fmtr);
+
+	# revert to simple string split if tokenization fails
+	my @argv = $argMatch ?? $argMatch.made !! $args.split(',');
+
+	print '(', @argv[0].trim;
+	for @argv[1..*] -> $arg {
+		print ",\n", $preArgWS, ' ', $arg.trim;
+	}
+	put ')', $post;
+}
